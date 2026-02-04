@@ -1,0 +1,47 @@
+:root {
+    --bg-primary: #121214;
+    --bg-secondary: #1c1c1f;
+    --bg-paper: #f4f1ea;
+
+    --text-primary: #e0e0e0;
+    --text-secondary: #a1a1aa;
+    --text-gold: #d4af37;
+    --text-dark: #2c2c2c;
+
+    --accent-gold: #d4af37;
+    --accent-gold-dim: #aa8c2c;
+    --accent-wine: #722f37;
+
+    --font-heading: 'Cinzel', serif;
+    --font-body: 'Cormorant Garamond', serif;
+    --font-ui: 'Inter', sans-serif;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-heading);
+    color: var(--text-gold);
+    margin: 0;
+    font-weight: 500;
+}
+
+button {
+    font-family: var(--font-ui);
+}
