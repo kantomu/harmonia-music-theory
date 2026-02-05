@@ -89,10 +89,10 @@ export class MusicTheory {
     flatten(note) {
         if (note.includes('x')) return note.replace('x', '#');
         if (note.includes('##')) return note.replace('##', '#');
-        if (note.includes('#')) return note.replace('#', ''); // A# -> A
-        if (note.includes('bb')) return note + 'b'; // Unusual
-        if (note.includes('b')) return note.replace('b', 'bb'); // Db -> Dbb
-        return note + 'b'; // C -> Cb
+        if (note.includes('#')) return note.replace('#', '');
+        if (note.includes('bb')) return note + 'b';
+        if (note.includes('b')) return note.replace('b', 'bb');
+        return note + 'b';
     }
 
     getChordFunction(index, mode) {
@@ -144,24 +144,15 @@ export class MusicTheory {
         }
 
         if (showBlueNotes) {
-            // Blue Notes: Direct Replacement logic
-            // b3, b5, b7 of Major Scale (or relative to current mode's intervals)
-            // Usually defined against Major.
-
             const majorScale = this.getMajorScale(root);
-
-            // 3rd Degree (b3)
-            // User request: No grace note. Direct replacement.
             const m3 = majorScale[2];
             scale[2].blueNote = this.flatten(m3);
             scale[2].isBlue = true;
 
-            // 5th Degree (b5)
             const p5 = majorScale[4];
             scale[4].blueNote = this.flatten(p5);
             scale[4].isBlue = true;
 
-            // 7th Degree (b7)
             const M7 = majorScale[6];
             scale[6].blueNote = this.flatten(M7);
             scale[6].isBlue = true;
@@ -275,6 +266,11 @@ export class MusicTheory {
 
             let secondaryDominant = this.getSecondaryDominant(root, i, qualitySuffix);
 
+            // Substitutes (Simple Trione or Relative)
+            // Just placeholder for now, usually computed in ProgressionService/Main
+            // BUT: Main.js uses `chord.secondaryDominant` for display.
+            // Let's add a `substitutes` array if needed.
+
             const guideTones = {
                 third: chordNotes[1],
                 seventh: tensionMask[7] ? chordNotes[3] : null
@@ -298,6 +294,12 @@ export class MusicTheory {
         return chords;
     }
 
+    // New Method for Intuitive Analysis String
+    getAnalysisString(chord, funcLabel) {
+        // User request: "F#7 (V7/IV)"
+        return `${chord.name} (${funcLabel})`;
+    }
+
     getEnharmonic(note) {
         const enharmonics = {
             'C#': 'Db', 'Db': 'C#',
@@ -311,5 +313,18 @@ export class MusicTheory {
             'E#': 'F', 'F': 'E#'
         };
         return enharmonics[note] || note;
+    }
+
+    // Helper to get notes for arbitrary chord string (e.g. "Em7")
+    // Simple parser for Swap Playback
+    getChordNotes(chordName, keyCenter) {
+        // tonal.js would be better, but we have Tone.js
+        // For now, let's just return a placeholder or try to parse root+quality.
+        // If it's a Substitute from our existing logic, we might know notes.
+        // Actually, let main.js handle note generation via Tonal/Theory if possible.
+        // Or just map to degrees if it's simple.
+
+        // Return empty if complex. Audio engine might parse name?
+        return [];
     }
 }

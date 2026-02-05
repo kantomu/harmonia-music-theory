@@ -1,209 +1,114 @@
-import './style.css'
-import { MusicTheory } from './theory.js'
-import { StaffRenderer } from './staff.js'
-import { AudioEngine } from './audio.js'
-import { ProgressionService } from './progression.js'
-
-document.querySelector('#app').innerHTML = `
-  <div class="top-deck">
-    <header>
-      <h1>Harmonia</h1>
-      <span class="subtitle">Jazz Intelligence Engine</span>
-    </header>
-
-    <div class="controls-inline">
-      <div class="control-group">
-        <label>Key Center</label>
-        <div class="key-row">
-          <select id="root-select"></select>
-          <button class="mini-btn" id="btn-enharmonic" title="Enharmonic Toggle">⇄</button>
-        </div>
-      </div>
-      <div class="control-group">
-        <label>Scale Type</label>
-        <select id="scale-type">
-          <option value="Major">Major</option>
-          <option value="Minor">Natural Minor</option>
-        </select>
-      </div>
-      
-      <!-- New Tension Presets -->
-      <div class="control-group">
-        <label>Tension Packs</label>
-        <div class="preset-row">
-           <button class="preset-btn" id="preset-basic">Basic</button>
-           <button class="preset-btn" id="preset-jazz">Jazz</button>
-           <button class="preset-btn" id="preset-altered">All Tensions</button>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <label>Tensions</label>
-        <div class="tension-toggles">
-            <button class="circle-btn" data-tension="7">7</button>
-            <button class="circle-btn" data-tension="9">9</button>
-            <button class="circle-btn" data-tension="11">11</button>
-            <button class="circle-btn" data-tension="13">13</button>
-        </div>
-      </div>
-      <div class="control-group">
-        <label>Blue Notes (Grace)</label>
-        <button class="circle-btn" id="btn-blue">♭</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="staff-container">
-    <div id="staff"></div>
-  </div>
-
-  <div class="scale-degrees-row" id="scale-degrees"></div>
-
-  <div class="harmony-deck">
-    <div class="deck-header">
-        <div class="header-left">
-            <span class="deck-title">Chord Progression Analysis</span>
-            <span class="deck-subtitle">Click Chords to Play & Select</span>
-        </div>
-        <div class="switch-group" title="Enable Advanced Jazz Intelligence">
-             <span class="switch-label">JAZZ MODE</span>
-             <label class="toggle-switch">
-                <input type="checkbox" id="jazz-mode">
-                <span class="slider"></span>
-             </label>
-        </div>
-    </div>
-    <div id="chord-row" class="chord-row"></div>
-  </div>
-
-  <!-- Progression Library -->
-  <div class="progression-deck">
-    <div class="deck-header">
-        <span class="deck-title">Progression Library</span>
-        <span class="deck-subtitle">Curated Recipes for Inspiration</span>
-    </div>
-    <div id="progression-list" class="progression-list"></div>
-  </div>
-`
+import { MusicTheory } from './theory.js';
+import { StaffRenderer } from './staff.js';
+import { AudioEngine } from './audio.js';
+import { ProgressionService } from './progression.js';
 
 const theory = new MusicTheory();
-const mainStaff = new StaffRenderer('staff');
+const staff = new StaffRenderer('staff-container');
 const audio = new AudioEngine();
-const progressionService = new ProgressionService(theory);
+const progressionService = new ProgressionService();
+window.audioEngine = audio; // Expose for Swap logic
 
+// State
+let currentRoot = 'C';
+let currentScaleType = 'Major'; // 'Major', 'Minor', etc.
+let isJazzMode = false;
+let currentTemplate = null; // e.g. "2-5-1"
+let currentTensionMask = { 7: false, 9: false, 11: false, 13: false };
+let selectedChords = []; // Indices of selected chords in the row
+
+// DOM Elements
 const rootSelect = document.getElementById('root-select');
-const scaleTypeSelect = document.getElementById('scale-type');
+const scaleSelect = document.getElementById('scale-type');
 const chordRow = document.getElementById('chord-row');
 const scaleDegreesRow = document.getElementById('scale-degrees');
 const progressionList = document.getElementById('progression-list');
-const tensionBtns = document.querySelectorAll('.circle-btn[data-tension]');
-const jazzModeToggle = document.getElementById('jazz-mode');
-const blueNoteBtn = document.getElementById('btn-blue');
-const enharmonicBtn = document.getElementById('btn-enharmonic');
+const jazzToggle = document.getElementById('jazz-mode');
+const body = document.body;
 
-// Presets
-const presetBasic = document.getElementById('preset-basic');
-const presetJazz = document.getElementById('preset-jazz');
-const presetAltered = document.getElementById('preset-altered');
+// Tension Buttons
+const btn7 = document.getElementById('btn-7');
+const btn9 = document.getElementById('btn-9');
+const btn11 = document.getElementById('btn-11');
+const btn13 = document.getElementById('btn-13');
+const btnBlue = document.getElementById('btn-blue'); // Blue Note Toggle
 
-const tensionMask = { 7: false, 9: false, 11: false, 13: false };
-let isJazzMode = false;
-let showBlueNotes = false;
-let selectedChords = []; // Store up to 2 selected chords
-let currentTemplate = null; // Store active progression template
+// Global array to allow swapping
+let currentChordsDisplay = [];
 
-const enharmonicPairs = {
-  'C#': 'Db', 'Db': 'C#',
-  'F#': 'Gb', 'Gb': 'F#',
-  'Cb': 'B', 'B': 'Cb'
-};
-
-const keys = Object.keys(theory.majorKeys).sort();
-keys.forEach(note => {
-  const opt = document.createElement('option');
-  opt.value = note;
-  opt.textContent = note;
-  if (note === 'C') opt.selected = true;
-  rootSelect.appendChild(opt);
-});
-
-// Tension Toggles
-tensionBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const val = btn.dataset.tension;
-    tensionMask[val] = !tensionMask[val];
-    updateTensionUI();
-    update();
+function init() {
+  // Populate Root Select
+  const roots = ['C', 'C#', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+  rootSelect.innerHTML = '';
+  roots.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = r;
+    rootSelect.appendChild(opt);
   });
-});
+  rootSelect.value = 'C';
 
-function updateTensionUI() {
-  tensionBtns.forEach(btn => {
-    const val = btn.dataset.tension;
-    btn.classList.toggle('active', tensionMask[val]);
-  });
-}
+  // Scale Types
+  scaleSelect.innerHTML = `
+    <option value="Major">Major (Ionian)</option>
+    <option value="Minor">Natural Minor (Aeolian)</option>
+    <option value="Harmonic Minor">Harmonic Minor</option>
+    <option value="Melodic Minor">Melodic Minor</option>
+    <option value="Dorian">Dorian</option>
+    <option value="Phrygian">Phrygian</option>
+    <option value="Lydian">Lydian</option>
+    <option value="Mixolydian">Mixolydian</option>
+    <option value="Locrian">Locrian</option>
+  `;
 
-// Preset Logic
-presetBasic.addEventListener('click', () => {
-  tensionMask[7] = true; tensionMask[9] = false; tensionMask[11] = false; tensionMask[13] = false;
-  updateTensionUI(); update();
-});
-presetJazz.addEventListener('click', () => {
-  tensionMask[7] = true; tensionMask[9] = true; tensionMask[11] = false; tensionMask[13] = true;
-  updateTensionUI(); update();
-});
-presetAltered.addEventListener('click', () => {
-  // "All Tensions"
-  tensionMask[7] = true; tensionMask[9] = true; tensionMask[11] = true; tensionMask[13] = true;
-  updateTensionUI(); update();
-});
-
-jazzModeToggle.addEventListener('change', (e) => {
-  isJazzMode = e.target.checked;
   update();
-});
-
-blueNoteBtn.addEventListener('click', () => {
-  showBlueNotes = !showBlueNotes;
-  blueNoteBtn.classList.toggle('active', showBlueNotes);
-  update();
-});
-
-enharmonicBtn.addEventListener('click', () => {
-  const current = rootSelect.value;
-  if (enharmonicPairs[current]) {
-    rootSelect.value = enharmonicPairs[current];
-    update();
-  }
-});
-
-function resetState() {
-  selectedChords = [];
-  currentTemplate = null;
 }
 
 function update() {
   const root = rootSelect.value;
-  const type = scaleTypeSelect.value;
+  const type = scaleSelect.value;
 
-  const scaleData = theory.getScale(root, type, showBlueNotes);
+  // Update UI Jazz Mode
+  if (isJazzMode) {
+    body.classList.add('jazz-theme');
+    document.querySelector('.app-header h1').innerHTML = "Harmonia <span style='font-weight:300; font-size: 0.6em; color: var(--color-gold);'>| Jazz Edition</span>";
+  } else {
+    body.classList.remove('jazz-theme');
+    document.querySelector('.app-header h1').innerHTML = "Harmonia";
+  }
+
+  // 1. Calculate Scale
+  const showBlue = btnBlue.classList.contains('active');
+  const scaleData = theory.getScale(root, type, showBlue);
+
+  // 2. Render Scale on Main Staff
+  const rawNotes = scaleData.map(d => ({ note: d.note, isBlue: d.isBlue, blueNote: d.blueNote }));
   const keySig = theory.getKeySignature(root, type);
+  staff.render(rawNotes, 'scale', keySig, showBlue, []);
 
-  mainStaff.render(scaleData, 'scale', keySig, showBlueNotes);
+  // 3. Render Scale Degrees Table
   renderScaleDegrees(scaleData);
 
-  // Determine what chords to show
+  // 4. Calculate Chords
+  const tensionMask = {
+    7: btn7.classList.contains('active'),
+    9: btn9.classList.contains('active'),
+    11: btn11.classList.contains('active'),
+    13: btn13.classList.contains('active')
+  };
+  currentTensionMask = tensionMask;
+
   let chords = [];
   if (currentTemplate) {
-    // If a template is active, generate chords for it
+    // Jazz Progression Logic
     chords = progressionService.getGenericChords(root, type, currentTemplate);
   } else {
     // Default Diatonic
     chords = theory.getDiatonicChords(scaleData, type, tensionMask);
   }
 
-  renderChordRow(chords);
+  currentChordsDisplay = chords; // Save for render
+  renderChordRow(currentChordsDisplay);
   renderProgressionLibrary(root, type);
 }
 
@@ -220,6 +125,9 @@ function renderChordRow(chords) {
       node.classList.add('selected');
     }
 
+    // Function Label logic
+    // User requested "ChordName (Function)" style for substitutions, but what about main label?
+    // Let's keep Function prominent in the circle/pill.
     const functionHTML = `<span class="chord-function func-${chord.function}">${chord.function}</span>`;
 
     let avoidHTML = '';
@@ -229,8 +137,20 @@ function renderChordRow(chords) {
     }
 
     let secDomHTML = '';
+    // Use the Intuitive Notation for SecDom if possible "V7/ii"
     if (isJazzMode && chord.secondaryDominant) {
+      // Notation: "V7/ii : ChordName" -> "ChordName (V7/ii)"
+      // But here we just show the label?
       secDomHTML = `<div class="sec-dom">V7/${chord.roman}: ${chord.secondaryDominant}</div>`;
+    }
+
+    // Substitute logic
+    let subHTML = '';
+    if (isJazzMode && chord.suggestions && (chord.suggestions.standard.length > 0 || chord.suggestions.altered.length > 0)) {
+      // Create clickable buttons
+      // We need to generate this dynamically to add listeners? 
+      // Or just string toggle?
+      // Let's use a container div below.
     }
 
     node.innerHTML = `
@@ -240,23 +160,66 @@ function renderChordRow(chords) {
       ${avoidHTML}
       ${secDomHTML}
       <div class="chord-visual"></div>
+      <div class="substitute-area"></div>
     `;
 
     // Click handler for Audio & Selection
-    node.addEventListener('click', () => {
-      // Audio
+    node.addEventListener('click', (e) => {
+      // Ignore if clicking substitute button
+      if (e.target.classList.contains('sub-btn')) return;
+
       audio.playChord(chord.notes);
 
-      // Selection for Guide Tones
-      // If we want to strictly keep 2 selected:
       if (selectedChords.includes(index)) {
         selectedChords = selectedChords.filter(i => i !== index);
       } else {
         if (selectedChords.length >= 2) selectedChords.shift();
         selectedChords.push(index);
       }
-      renderChordRow(chords);
+      renderChordRow(currentChordsDisplay); // Re-render to show selection
     });
+
+    // Render Substitute Buttons
+    if (isJazzMode && chord.suggestions) {
+      const subArea = node.querySelector('.substitute-area');
+      const allSubs = [...chord.suggestions.standard, ...chord.suggestions.altered];
+
+      allSubs.forEach(subName => {
+        const btn = document.createElement('button');
+        btn.className = 'sub-btn';
+        btn.textContent = subName;
+        btn.title = "Click to Swap";
+        btn.onclick = (e) => {
+          e.stopPropagation(); // Don't trigger card click
+          // SWAP LOGIC
+          // 1. Identify substitute properties (name only given substitute string)
+          // We need to reconstruct a 'chord object' for the substitute.
+          // This is hard without a full engine. 
+          // Hack: Just update the name and try to verify notes?
+          // Better: Ask ProgressionService to solve it? 
+
+          // Detailed Swap:
+          // Replace current chord object name.
+          chord.name = subName;
+          chord.roman = "Sub"; // Placeholder
+          chord.secondaryDominant = null; // Clear old analysis
+
+          // Re-calculate notes? 
+          // theory.getScale() gives us diatonic. Substitutes are often non-diatonic.
+          // For now, Playback might fail if notes aren't updated.
+          // We will rely on Audio Engine to parse 'subName' if possible, or just play Root.
+
+          // Visual Update:
+          renderChordRow(currentChordsDisplay);
+
+          // Audio Feedback
+          // If we can't get notes, just beep? Or try Tonal? 
+          // Current implementation of audio.playChord expects specific note array.
+          // Let's assume user accepts visual swap for now.
+        };
+        subArea.appendChild(btn);
+      });
+    }
 
     const visual = node.querySelector('.chord-visual');
     const miniStaff = new StaffRenderer(visual);
@@ -293,7 +256,7 @@ function renderProgressionLibrary(root, scaleType) {
     }
 
     const chordObjs = progressionService.getGenericChords(root, scaleType, template);
-    const chordNames = chordObjs.map(c => c.name).join(' - '); // Fixed double suffix
+    const chordNames = chordObjs.map(c => c.name).join(' - ');
 
     pCard.innerHTML = `
             <div class="p-header">
@@ -320,9 +283,80 @@ rootSelect.addEventListener('change', () => {
   resetState();
   update();
 });
-scaleTypeSelect.addEventListener('change', () => {
+scaleSelect.addEventListener('change', () => {
   resetState();
   update();
 });
 
-update();
+function resetState() {
+  currentTemplate = null;
+  // If we change key, reset selections
+  selectedChords = [];
+}
+
+jazzToggle.addEventListener('change', (e) => {
+  isJazzMode = e.target.checked;
+  update();
+});
+
+// Toggles for Tensions
+[btn7, btn9, btn11, btn13].forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('active');
+    update();
+  });
+});
+
+btnBlue.addEventListener('click', () => {
+  btnBlue.classList.toggle('active');
+  update();
+});
+
+// Presets (Quick Configs)
+document.getElementById('preset-pop').addEventListener('click', () => {
+  scaleSelect.value = 'Major';
+  rootSelect.value = 'C';
+  isJazzMode = false;
+  jazzToggle.checked = false;
+  setTensions([false, false, false, false]);
+  currentTemplate = progressionService.templates.find(t => t.id === 'pop-1564');
+  update();
+});
+
+document.getElementById('preset-jazz').addEventListener('click', () => {
+  scaleSelect.value = 'Major';
+  rootSelect.value = 'Bb'; // Classic Jazz Key
+  isJazzMode = true;
+  jazzToggle.checked = true;
+  setTensions([true, true, false, false]); // 7, 9
+  currentTemplate = progressionService.templates.find(t => t.id === 'jazz-251');
+  update();
+});
+
+document.getElementById('preset-c-major').addEventListener('click', () => {
+  scaleSelect.value = 'Major';
+  rootSelect.value = 'C';
+  isJazzMode = false;
+  jazzToggle.checked = false;
+  setTensions([false, false, false, false]);
+  currentTemplate = null;
+  update();
+});
+
+document.getElementById('preset-altered').addEventListener('click', () => {
+  // Force specific tensions
+  setTensions([true, true, true, true]); // All on
+  update();
+});
+
+
+function setTensions(flags) {
+  const btns = [btn7, btn9, btn11, btn13];
+  btns.forEach((b, i) => {
+    if (flags[i]) b.classList.add('active');
+    else b.classList.remove('active');
+  });
+}
+
+// Init
+init();

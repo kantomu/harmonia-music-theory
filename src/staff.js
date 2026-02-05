@@ -15,10 +15,6 @@ export class StaffRenderer {
         const keyAccidentals = Array.isArray(keySignature) ? keySignature : (keySignature.accidentals || []);
 
         // Zoom Logic:
-        // CSS Height is 120px. 
-        // To make notes "2x bigger", we reduce heightView.
-        // Was 130. Now 90.
-        // widthView 160.
         const widthView = (type === 'chord') ? 160 : 500;
         const heightView = (type === 'chord') ? 100 : 150;
 
@@ -29,7 +25,6 @@ export class StaffRenderer {
         svg.style.overflow = "visible";
 
         // Draw Staff Lines
-        // For chords, move startY up to fit in smaller view
         const startY = (type === 'chord') ? 30 : 50;
         const lineSpacing = 10;
         const bottomY = startY + 4 * lineSpacing;
@@ -49,33 +44,30 @@ export class StaffRenderer {
         // Clef
         const clef = document.createElementNS(this.svgNS, "text");
         clef.textContent = "𝄞";
-        clef.setAttribute("x", 10); // Slightly more left
+        clef.setAttribute("x", 10);
         clef.setAttribute("y", startY + 30);
         clef.setAttribute("font-size", "35");
         clef.setAttribute("font-family", "serif");
         svg.appendChild(clef);
 
         // Draw Key Signature
-        // bottomY = startY + 40 (approx E4 line).
         const keySigWidth = this.drawKeySignature(svg, keySignature, startY + 40);
 
         // Dynamic Start X based on Key Sig
-        // Clef (10 + 35 width) + KeySig + Padding
         let startNoteX = 50 + keySigWidth + 20;
 
         // Pre-process Notes
         const noteMap = { 'C': 0, 'D': 1, 'E': 2, 'F': 3, 'G': 4, 'A': 5, 'B': 6 };
         let processedNotes = [];
 
-        let currentOctave = 4;
-        let lastNoteVal = -999;
+        // Close Voicing Logic (E4 Center)
+        const centerStep = 2; // E4
 
         notes.forEach((noteObj, index) => {
             let noteName = (typeof noteObj === 'string') ? noteObj : noteObj.note;
             const isBlue = noteObj.isBlue;
             const replacementNote = noteObj.blueNote;
 
-            // Blue Note Replacement
             if (isBlue && replacementNote) {
                 noteName = replacementNote;
             }
@@ -83,32 +75,24 @@ export class StaffRenderer {
             const cleanNote = noteName.replace(/[#bxy]+$/, '');
             let noteVal = noteMap[cleanNote];
 
-            // Heuristic Octave Adjustment
-            if (index === 0) {
-                if (['A', 'B'].includes(cleanNote)) currentOctave = 3;
-                else currentOctave = 4;
-            } else {
-                if (lastNoteVal >= 5 && noteVal <= 1) currentOctave++;
-                else if (lastNoteVal <= 1 && noteVal >= 5) currentOctave--;
+            // Close Voicing Algorithm
+            let bestOctave = 4;
+            let minDiff = 999;
+            for (let oct = 3; oct <= 5; oct++) {
+                const stepVal = noteVal + (oct - 4) * 7;
+                const diff = Math.abs(stepVal - centerStep);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestOctave = oct;
+                }
             }
-            lastNoteVal = noteVal;
+            let currentOctave = bestOctave;
 
             let stepsFromE4 = (noteVal - 2) + (currentOctave - 4) * 7;
-
-            // User Request: Drop 9, 11, 13 (index >= 4) by 1 Octave
-            if (type === 'chord' && index >= 4) {
-                stepsFromE4 -= 7;
-            }
-
             const cy = bottomY - (stepsFromE4 * 5);
 
-            // Shift Logic:
-            // 1. Tensions (9, 11, 13) -> ALWAYS Shift Right.
-            //    Tensions are typically at indices 4, 5, 6 (Root=0, 3rd=1, 5th=2, 7th=3).
-            // 2. Clusters (2nds) -> Upper note Shift Right. 
-            //    (Applied if not already shifted by rule 1).
-
             let shift = false;
+            // Shift Tensions (index >= 4) for visual distinction, or Clusters (Seconds)
             if (type === 'chord' && index >= 4) {
                 shift = 'right';
             }
@@ -125,23 +109,35 @@ export class StaffRenderer {
 
         const noteSpacing = (staffWidth - startNoteX + 10) / (notes.length || 1);
 
-        // Collision Detection for remaining notes (e.g. Root-2nd, or 3rd-4th if tension not strictly high index)
+        // Collision Detection for remaining notes (e.g. Inversion Clusters)
         if (type === 'chord' && processedNotes.length > 1) {
-            for (let i = 0; i < processedNotes.length - 1; i++) {
-                const n1 = processedNotes[i];
-                const n2 = processedNotes[i + 1];
+            // Sort by distinct visual steps to find neighbors?
+            // Since we shifted some notes (tensions) right, they won't collide with main column.
+            // We only care about collisions within the SAME column.
 
-                // If already shifted, skip re-eval?
-                // Wait, if n2 is 9th (shifted), and n1 is Root (unshifted). Distance large.
-                // If n2 is 11th (shifted right), n1 is 3rd (unshifted).
-                // What if n1 and n2 are seconds, and NEITHER is tension index? (e.g. Add2 chord: Root, 2nd, 5th).
-                // Root=0, 2nd=1. Index < 4. So collision logic needed.
+            // Check Main Column Collisions (Unshifted)
+            const mainCol = processedNotes.filter(n => n.shifted !== 'right');
+            mainCol.sort((a, b) => a.stepsFromE4 - b.stepsFromE4);
+            for (let i = 0; i < mainCol.length - 1; i++) {
+                if (Math.abs(mainCol[i].stepsFromE4 - mainCol[i + 1].stepsFromE4) === 1) {
+                    // Second interval in main column. Shift upper note to right?
+                    // Or shift lower note to left? 
+                    // Standard notation: lower is left, upper is right.
+                    // But our "shifted" means "Right Column".
+                    // So shift the upper note.
+                    mainCol[i + 1].shifted = 'right';
+                }
+            }
 
-                if (!n2.shifted) {
-                    const stepDiff = Math.abs(n1.stepsFromE4 - n2.stepsFromE4);
-                    if (stepDiff === 1) {
-                        n2.shifted = 'right';
-                    }
+            // Check Right Column Collisions (Shifted)
+            const rightCol = processedNotes.filter(n => n.shifted === 'right');
+            rightCol.sort((a, b) => a.stepsFromE4 - b.stepsFromE4);
+            for (let i = 0; i < rightCol.length - 1; i++) {
+                if (Math.abs(rightCol[i].stepsFromE4 - rightCol[i + 1].stepsFromE4) === 1) {
+                    // Collision in right column. 
+                    // Usually we don't have this with standard voicings, but if we do...
+                    // We might need a 3rd column or toggle back?
+                    // For simplicity, let's keep as is.
                 }
             }
         }
@@ -150,22 +146,12 @@ export class StaffRenderer {
             const color = n.isBlue ? "#E74C3C" : "#000";
 
             let cx = startNoteX + i * noteSpacing;
-            // CENTER LOGIC:
             if (type === 'chord') cx = 95 + (keySigWidth / 2);
 
             let headCx = cx;
-            // Shift Right logic
             if (n.shifted === 'right') {
                 headCx = cx + 13;
             }
-
-            // Ledger Lines logic needs startY context? NO, it uses relative to bottomY (E4).
-            // But bottomY depends on startY.
-            // drawLedgerLines uses bottomLineY = 90 hardcoded.
-            // FIX: Pass bottomY to drawLedgerLines or update it.
-            // In render: bottomY = startY + 40.
-            // chord: 30 + 40 = 70.
-            // scale: 50 + 40 = 90.
 
             if (n.stepsFromE4 <= -2 || n.stepsFromE4 >= 10) {
                 this.drawLedgerLines(svg, headCx, n.cy, n.stepsFromE4, color, false, bottomY);
@@ -181,14 +167,11 @@ export class StaffRenderer {
             head.setAttribute("fill", color);
             svg.appendChild(head);
 
-            // Stem
-            // Rule: Shifted (Right) notes = NO STEM.
-            // Main (Left) notes = STEM.
+            // Stem (Only for Main Column)
             if (n.shifted !== 'right') {
                 const stemHeight = 35;
                 const stemY2 = n.cy - stemHeight;
-                const stemCx = cx + 5; // Fixed to main column
-
+                const stemCx = cx + 5;
                 const stem = document.createElementNS(this.svgNS, "line");
                 stem.setAttribute("x1", stemCx);
                 stem.setAttribute("y1", n.cy);
@@ -205,17 +188,11 @@ export class StaffRenderer {
                 const accText = document.createElementNS(this.svgNS, "text");
                 accText.textContent = this.getAccidentalSymbol(acc);
 
-                // Position:
-                // User requirement: "Write explicitly further to left".
-                // Main column is `cx`.
-                // Standard left is `cx - x`.
-                // Previous was 24. Let's make it 35 to ensure separation.
-                // ALSO: Use `headCx` reference? 
-                // No, Main Column `cx` is the anchor. 
-                // Accidentals stack to the left of the chord.
-                // If we have multiple accidentals, we might need to stagger them?
-                // For now, strict spacing:
-                const accX = cx - 35;
+                // Zig-Zag Staggering
+                let accX = cx - 35;
+                if (n.shifted === 'right') {
+                    accX -= 40; // Far Left for Shifted Notes
+                }
 
                 accText.setAttribute("x", accX);
                 accText.setAttribute("y", n.cy + 6);
@@ -259,9 +236,6 @@ export class StaffRenderer {
         const width = isSmall ? 14 : 24;
         const x1 = x - (width / 2);
         const x2 = x + (width / 2);
-        // startY=50. 4*10=40. Bottom=90.
-        // E4 is at BottomY=90.
-
 
         if (targetStep <= -2) {
             for (let s = -2; s >= targetStep; s -= 2) {
@@ -300,10 +274,7 @@ export class StaffRenderer {
         let xOffset = 45; // Start after Clef
         const stepX = 12;
 
-        // Order of Sharps/Flats positions (Steps from E4)
-        // Sharps: F(8), C(5), G(9), D(6), A(3), E(7), B(4)
         const sharpSteps = [8, 5, 9, 6, 3, 7, 4];
-        // Flats: B(4), E(7), A(3), D(6), G(2), C(5), F(1) 
         const flatSteps = [4, 7, 3, 6, 2, 5, 1];
 
         const steps = isSharp ? sharpSteps : flatSteps;
@@ -317,7 +288,7 @@ export class StaffRenderer {
             const txt = document.createElementNS(this.svgNS, "text");
             txt.textContent = symbol;
             txt.setAttribute("x", xOffset);
-            txt.setAttribute("y", cy + 6); // visual adjust
+            txt.setAttribute("y", cy + 6);
             txt.setAttribute("font-size", "22");
             txt.setAttribute("font-family", "serif");
             svg.appendChild(txt);
@@ -325,7 +296,6 @@ export class StaffRenderer {
             xOffset += stepX;
         });
 
-        // Return the width occupied by key sig (relative to start 45)
         return (xOffset - 45);
     }
 }
