@@ -1,13 +1,207 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Harmonia - Music Theory</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Harmonia - Advanced Music Theory Visualization Platform based on Berklee Method" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <title>Harmonia - Music Theory</title>
+</head>
+
+<body>
+  <div id="app">
+    <!-- Top Deck: Header & Controls -->
+    <header class="top-deck app-header">
+      <div class="header-left">
+        <h1 class="title">Harmonia</h1>
+        <div class="subtitle">Advanced Music Theory Visualization</div>
+      </div>
+
+      <div class="controls-inline">
+        <!-- Key Center -->
+        <div class="control-group">
+          <label>Key Center</label>
+          <select id="root-select">
+            <option value="C" selected>C</option>
+            <option value="C#">C♯</option>
+            <option value="Db">D♭</option>
+            <option value="D">D</option>
+            <option value="Eb">E♭</option>
+            <option value="E">E</option>
+            <option value="F">F</option>
+            <option value="F#">F♯</option>
+            <option value="Gb">G♭</option>
+            <option value="G">G</option>
+            <option value="Ab">A♭</option>
+            <option value="A">A</option>
+            <option value="Bb">B♭</option>
+            <option value="B">B</option>
+          </select>
+        </div>
+
+        <!-- Scale/Mode Type -->
+        <div class="control-group">
+          <label>Scale / Mode</label>
+          <select id="scale-type">
+            <optgroup label="Major Modes">
+              <option value="Major" selected>Major (Ionian)</option>
+              <option value="Dorian">Dorian</option>
+              <option value="Phrygian">Phrygian</option>
+              <option value="Lydian">Lydian</option>
+              <option value="Mixolydian">Mixolydian</option>
+              <option value="Aeolian">Natural Minor (Aeolian)</option>
+              <option value="Locrian">Locrian</option>
+            </optgroup>
+            <optgroup label="Minor Variants">
+              <option value="Harmonic Minor">Harmonic Minor</option>
+              <option value="Melodic Minor">Melodic Minor (Jazz)</option>
+            </optgroup>
+            <optgroup label="Jazz Scales">
+              <option value="Lydian Dominant">Lydian Dominant</option>
+              <option value="Altered">Altered (Super Locrian)</option>
+              <option value="Locrian #2">Locrian ♯2</option>
+              <option value="Diminished HW">Diminished (H-W)</option>
+              <option value="Whole Tone">Whole Tone</option>
+            </optgroup>
+            <optgroup label="Bebop">
+              <option value="Major Bebop">Major Bebop</option>
+              <option value="Dominant Bebop">Dominant Bebop</option>
+              <option value="Minor Bebop">Minor Bebop</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <!-- Mode Controls -->
+        <div class="control-group">
+          <div class="switch-group">
+            <label class="toggle-switch">
+              <input type="checkbox" id="jazz-mode">
+              <span class="slider"></span>
+            </label>
+            <span class="switch-label">Jazz Mode</span>
+          </div>
+
+          <!-- Tension Toggles -->
+          <div id="tension-controls" class="tension-toggles">
+            <button id="btn-7" class="circle-btn" title="7th">7</button>
+            <button id="btn-9" class="circle-btn" title="9th">9</button>
+            <button id="btn-11" class="circle-btn" title="11th">11</button>
+            <button id="btn-13" class="circle-btn" title="13th">13</button>
+          </div>
+        </div>
+
+        <!-- Voicing Type -->
+        <div class="control-group">
+          <label>Voicing</label>
+          <select id="voicing-type">
+            <option value="close">Close Position</option>
+            <option value="shell">Shell (1-3-7)</option>
+            <option value="rootlessA">Rootless Type A</option>
+            <option value="rootlessB">Rootless Type B</option>
+            <option value="drop2">Drop 2</option>
+            <option value="quartal">Quartal</option>
+          </select>
+        </div>
+
+        <!-- Additional Tools -->
+        <div class="control-group tools">
+          <button id="btn-blue" class="circle-btn" title="Blue Notes">♭</button>
+          <button id="btn-dark" class="circle-btn" title="Dark Mode">☾</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="main-grid">
+      <!-- Top Row: Scale/Staff + Circle of Fifths -->
+      <section class="top-row">
+        <!-- Scale Visualization -->
+        <div class="deck harmony-deck">
+          <div class="deck-header">
+            <span class="deck-title">Scale & Staff</span>
+            <div id="audio-controls">
+              <button id="btn-play-scale" class="preset-btn">▶ Play Scale</button>
+            </div>
+          </div>
+          <div id="staff-container" class="staff-area"></div>
+          <div id="scale-degrees" class="scale-degrees-row"></div>
+        </div>
+
+        <!-- Circle of Fifths -->
+        <div class="deck cof-deck">
+          <div class="deck-header">
+            <span class="deck-title">Circle of Fifths</span>
+          </div>
+          <div id="cof-container" class="cof-container"></div>
+        </div>
+      </section>
+
+      <!-- Diatonic Chords - Full Width -->
+      <section class="chord-section">
+        <div class="deck chord-deck">
+          <div class="deck-header">
+            <span class="deck-title">Diatonic Chords</span>
+          </div>
+          <div id="chord-row" class="chord-row"></div>
+        </div>
+      </section>
+
+      <!-- Bottom Row: Piano + ANS -->
+      <section class="bottom-row">
+        <!-- Piano Keyboard -->
+        <div class="deck piano-deck">
+          <div class="deck-header">
+            <span class="deck-title">Piano Keyboard</span>
+          </div>
+          <div id="piano-container" class="piano-container"></div>
+        </div>
+
+        <!-- ANS Chart (Available Note Scales) -->
+        <div class="deck ans-deck" id="ans-deck">
+          <div class="deck-header">
+            <span class="deck-title">Available Note Scales (ANS)</span>
+          </div>
+          <div id="ans-chart" class="ans-chart"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Progression Library -->
+    <section class="progression-deck">
+      <div class="deck-header">
+        <span class="deck-title">Progression Library</span>
+        <select id="progression-select">
+          <option value="">-- Select Progression --</option>
+        </select>
+      </div>
+      <div id="progression-list" class="progression-list"></div>
+    </section>
+
+    <!-- Info Panel (Collapsible) -->
+    <aside class="info-panel" id="info-panel">
+      <div class="deck-header">
+        <span class="deck-title">Theory Reference</span>
+        <button class="collapse-btn" id="collapse-info">−</button>
+      </div>
+      <div class="info-content" id="info-content">
+        <div class="info-section">
+          <h4>Scale Formulas</h4>
+          <div id="scale-formula"></div>
+        </div>
+        <div class="info-section">
+          <h4>Chord-Scale Relationships</h4>
+          <div id="chord-scale-info"></div>
+        </div>
+        <div class="info-section">
+          <h4>Tensions & Avoid Notes</h4>
+          <div id="tension-info"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
 </html>

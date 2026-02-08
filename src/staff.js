@@ -75,18 +75,46 @@ export class StaffRenderer {
             const cleanNote = noteName.replace(/[#bxy]+$/, '');
             let noteVal = noteMap[cleanNote];
 
-            // Close Voicing Algorithm
-            let bestOctave = 4;
-            let minDiff = 999;
-            for (let oct = 3; oct <= 5; oct++) {
-                const stepVal = noteVal + (oct - 4) * 7;
-                const diff = Math.abs(stepVal - centerStep);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    bestOctave = oct;
+            let currentOctave = 4; // Default starting octave for scale
+
+            if (type === 'chord') {
+                // Close Voicing Algorithm for chords (E4 Center)
+                const centerStep = 2; // E4
+                let bestOctave = 4;
+                let minDiff = 999;
+                for (let oct = 3; oct <= 5; oct++) {
+                    const stepVal = noteVal + (oct - 4) * 7;
+                    const diff = Math.abs(stepVal - centerStep);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        bestOctave = oct;
+                    }
+                }
+                currentOctave = bestOctave;
+            } else {
+                // Scale display: ascending order
+                // Only initialize loop state variables once before loop (done outside or managed here)
+                // We need `lastScaleVal` to persist across iterations.
+                // Since this loop is `forEach`, we can't easily access outer scope variable unless defined outside.
+
+                // Scale display
+                // If octave is provided (from main.js), use it directly
+                if (noteObj.octave !== undefined) {
+                    currentOctave = noteObj.octave;
+                } else {
+                    // Fallback: internal ascending logic
+                    if (index === 0) {
+                        this.currentScaleOctave = 4;
+                        this.lastScaleVal = noteVal;
+                    } else {
+                        if (noteVal < this.lastScaleVal) {
+                            this.currentScaleOctave++;
+                        }
+                        this.lastScaleVal = noteVal;
+                    }
+                    currentOctave = this.currentScaleOctave;
                 }
             }
-            let currentOctave = bestOctave;
 
             let stepsFromE4 = (noteVal - 2) + (currentOctave - 4) * 7;
             const cy = bottomY - (stepsFromE4 * 5);
@@ -191,7 +219,7 @@ export class StaffRenderer {
                 // Zig-Zag Staggering
                 let accX = cx - 35;
                 if (n.shifted === 'right') {
-                    accX -= 40; // Far Left for Shifted Notes
+                    accX -= 15; // Slightly left of shifted notes (9/11/13th)
                 }
 
                 accText.setAttribute("x", accX);

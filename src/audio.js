@@ -8,32 +8,52 @@ export class AudioEngine {
     }
 
     async init() {
-        // Jazz Piano / Rhodes simulation
-        // Using FM Synth or Sampler would be better, but sticking to simple PolySynth for now
-        // with slight detune and filter for "warmth"
-        this.synth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: {
-                type: "triangle"
+        // High-Quality Piano Sampler (Salamander Grand Piano)
+        // Load samples from Tone.js official examples
+        this.synth = new Tone.Sampler({
+            urls: {
+                "A0": "A0.mp3",
+                "C1": "C1.mp3",
+                "D#1": "Ds1.mp3",
+                "F#1": "Fs1.mp3",
+                "A1": "A1.mp3",
+                "C2": "C2.mp3",
+                "D#2": "Ds2.mp3",
+                "F#2": "Fs2.mp3",
+                "A2": "A2.mp3",
+                "C3": "C3.mp3",
+                "D#3": "Ds3.mp3",
+                "F#3": "Fs3.mp3",
+                "A3": "A3.mp3",
+                "C4": "C4.mp3",
+                "D#4": "Ds4.mp3",
+                "F#4": "Fs4.mp3",
+                "A5": "A5.mp3",
+                "C6": "C6.mp3",
+                "D#6": "Ds6.mp3",
+                "F#6": "Fs6.mp3",
+                "A6": "A6.mp3",
+                "C7": "C7.mp3",
+                "D#7": "Ds7.mp3",
+                "F#7": "Fs7.mp3",
+                "A7": "A7.mp3",
+                "C8": "C8.mp3"
             },
-            envelope: {
-                attack: 0.02,
-                decay: 0.3,
-                sustain: 0.3,
-                release: 1.2
-            }
+            release: 1,
+            baseUrl: "https://tonejs.github.io/audio/salamander/"
         }).toDestination();
 
-        // Add Reverb
+        // Add lighter Reverb for concert hall feel
         const reverb = new Tone.Reverb({
-            decay: 2.5,
+            decay: 2.0,
             preDelay: 0.1,
-            wet: 0.3
+            wet: 0.2
         }).toDestination();
 
         this.synth.connect(reverb);
 
-        // Volume
-        this.synth.volume.value = -8;
+        // Volume adjustment (Sampler can be loud)
+        this.synth.volume.value = -5;
 
         this.initialized = true;
     }
@@ -42,60 +62,86 @@ export class AudioEngine {
         if (Tone.context.state !== 'running') {
             await Tone.start();
         }
+        await Tone.loaded(); // Ensure samples are loaded
     }
 
     playChord(notes) {
-        this.ensureAudio();
-        const now = Tone.now();
+        this.ensureAudio().then(() => {
+            const now = Tone.now();
 
-        // Parse notes (e.g. "C", "D#") and add octave (4)
-        // If notes have metadata (objects), extract note name.
+            // Notes can be strings ("C4") or objects ({ note: "C", octave: 4 })
+            notes.forEach((n, i) => {
+                let noteName = (typeof n === 'string') ? n : n.note;
 
-        notes.forEach((n, i) => {
-            let noteName = (typeof n === 'string') ? n : n.note;
-            let time = now + (i * 0.03); // Strum effect
+                // Construct pitch with octave
+                let pitch;
+                if (typeof n === 'object' && n.octave !== undefined) {
+                    pitch = n.note + n.octave;
+                } else {
+                    // Check if string already has octave
+                    const hasOctave = /\d+$/.test(noteName);
+                    pitch = hasOctave ? noteName : noteName + '4';
+                }
 
-            // Check for Grace Note logic
-            if (typeof n === 'object' && n.graceNote) {
-                // Grace note logic: Play grace note VERY briefly before main note
-                // Slide effect: Play grace note at time X, then main note at X + 0.1
-                // Grace note duration short.
+                let time = now + (i * 0.03); // Strum effect
 
-                // Add Octave
-                const gracePitch = n.graceNote + '4'; // Simplify octave
-                const mainPitch = noteName + '4';
+                // Check for Grace Note logic
+                if (typeof n === 'object' && n.graceNote) {
+                    const gracePitch = n.graceNote + (n.octave || '4');
 
-                // Play Grace
-                this.synth.triggerAttackRelease(gracePitch, "32n", time);
-
-                // Play Main Note (slightly delayed)
-                this.synth.triggerAttackRelease(mainPitch, "2n", time + 0.1);
-            } else {
-                // Normal Note
-                // Add octave. Logic needed for correct octave. 
-                // Simple assumption: 4th octave.
-                const pitch = noteName + '4';
-                this.synth.triggerAttackRelease(pitch, "2n", time);
-            }
+                    // Play Grace
+                    this.synth.triggerAttackRelease(gracePitch, "32n", time, 0.6); // velocity 0.6
+                    // Play Main Note
+                    this.synth.triggerAttackRelease(pitch, "1n", time + 0.1, 0.8);
+                } else {
+                    // Normal Note - longer duration for piano sustain
+                    this.synth.triggerAttackRelease(pitch, "1n", time);
+                }
+            });
         });
     }
 
     playScale(scaleNotes) {
-        this.ensureAudio();
-        const now = Tone.now();
-        scaleNotes.forEach((n, i) => {
-            const time = now + i * 0.5;
-            let noteName = n.note;
+        this.ensureAudio().then(() => {
+            const now = Tone.now();
 
-            if (n.graceNote) {
-                const gracePitch = n.graceNote + '4';
-                const mainPitch = noteName + '4';
-                this.synth.triggerAttackRelease(gracePitch, "32n", time);
-                this.synth.triggerAttackRelease(mainPitch, "4n", time + 0.1);
-            } else {
-                const pitch = noteName + '4';
-                this.synth.triggerAttackRelease(pitch, "4n", time);
-            }
+            let currentOctave = 4;
+            let lastVal = -1;
+            const noteMap = { 'C': 0, 'D': 1, 'E': 2, 'F': 3, 'G': 4, 'A': 5, 'B': 6 };
+
+            scaleNotes.forEach((n, i) => {
+                const time = now + i * 0.5;
+                let noteName = n.note;
+
+                // Octave Logic for ascending scale
+                let pitch;
+                if (n.octave !== undefined) {
+                    pitch = n.note + n.octave;
+                } else {
+                    // Fallback Octave Logic for ascending scale
+                    const clean = noteName.replace(/[#bxy]+$/, '');
+                    const val = noteMap[clean];
+
+                    if (i === 0) {
+                        lastVal = val;
+                    } else {
+                        if (val < lastVal) {
+                            currentOctave++;
+                        }
+                        lastVal = val;
+                    }
+                    pitch = noteName + currentOctave;
+                }
+
+                if (n.graceNote) {
+                    const gracePitch = n.graceNote + currentOctave;
+                    const mainPitch = pitch;
+                    this.synth.triggerAttackRelease(gracePitch, "32n", time, 0.6);
+                    this.synth.triggerAttackRelease(mainPitch, "4n", time + 0.1, 0.8);
+                } else {
+                    this.synth.triggerAttackRelease(pitch, "4n", time, 0.8);
+                }
+            });
         });
     }
 }

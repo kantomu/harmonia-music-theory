@@ -46,22 +46,23 @@ export class MusicTheory {
 
         this.tensionRules = {
             'Major': {
-                0: { 9: true, 11: false, 13: true, avoidNotes: [11] }, // I
-                1: { 9: true, 11: true, 13: true, avoidNotes: [] },     // II
-                2: { 9: false, 11: true, 13: false, avoidNotes: [9, 13] }, // III
-                3: { 9: true, 11: true, 13: true, avoidNotes: [] },     // IV
-                4: { 9: true, 11: false, 13: true, avoidNotes: [11] },  // V
-                5: { 9: true, 11: true, 13: false, avoidNotes: [13] },  // VI
-                6: { 9: false, 11: true, 13: false, avoidNotes: [9] }   // VII
+                0: { 9: true, 11: false, 13: true, avoidNotes: [11] }, // I (Ionian) - 11 is avoid (P4)
+                1: { 9: true, 11: true, 13: true, avoidNotes: [] },     // II (Dorian) - All tensions good
+                2: { 9: false, 11: true, 13: false, avoidNotes: [9, 13] }, // III (Phrygian) - b9, b13 avoid
+                3: { 9: true, 11: true, 13: true, avoidNotes: [] },     // IV (Lydian) - #11 is diatonic
+                4: { 9: true, 11: false, 13: true, avoidNotes: [11] },  // V (Mixolydian) - 11 is avoid (sus4 ok)
+                5: { 9: true, 11: false, 13: false, avoidNotes: [13] },  // VI (Aeolian) - b13 avoid
+                6: { 9: false, 11: true, 13: false, avoidNotes: [9] }   // VII (Locrian) - b9 avoid
             },
             'Minor': {
-                0: { 9: true, 11: true, 13: false, avoidNotes: [13] }, // Im7
-                1: { 9: false, 11: true, 13: false, avoidNotes: [9, 13] }, // IIm7b5
-                2: { 9: true, 11: false, 13: true, avoidNotes: [11] }, // bIII
-                3: { 9: true, 11: true, 13: true, avoidNotes: [] },    // IVm7
-                4: { 9: false, 11: true, 13: false, avoidNotes: [9, 13] }, // Vm7
-                5: { 9: true, 11: true, 13: true, avoidNotes: [] },    // bVI
-                6: { 9: true, 11: false, 13: true, avoidNotes: [11] }  // bVII
+                // Im (Functioning as Tonic Minor) often borrows from Dorian for extensions
+                0: { 9: true, 11: true, 13: true, forceMajor13: true, avoidNotes: [] }, // Im (Dorian extensions)
+                1: { 9: false, 11: true, 13: false, avoidNotes: [9, 13] }, // IIm7b5 (Locrian #2 or Locrian)
+                2: { 9: true, 11: false, 13: true, avoidNotes: [11] }, // bIII (Ionian)
+                3: { 9: true, 11: true, 13: true, avoidNotes: [] },    // IVm7 (Dorian)
+                4: { 9: false, 11: true, 13: false, avoidNotes: [9, 13] }, // Vm7 (Phrygian)
+                5: { 9: true, 11: false, 13: true, avoidNotes: [11] }, // bVI (Lydian)
+                6: { 9: true, 11: false, 13: false, avoidNotes: [13] }  // bVII (Mixolydian) - b13? No, normal Mixo. 
             }
         };
 
@@ -192,10 +193,12 @@ export class MusicTheory {
     getDiatonicChords(scaleNotes, mode, tensionMask = {}) {
         const chords = [];
         const degrees = ["I", "II", "III", "IV", "V", "VI", "VII"];
-        const degreesMinor = ["i", "ii", "III", "iv", "v", "VI", "VII"];
-
-        const ruleKey = mode.includes('Minor') ? 'Minor' : 'Major';
-        const isMin = mode.includes('Minor');
+        // Berklee standard: minor key degrees relative to parallel major
+        const degreesMinor = ["i", "ii°", "♭III", "iv", "v", "♭VI", "♭VII"];
+        // Minor modes include: Aeolian (Natural Minor), Harmonic Minor, Melodic Minor, Dorian, Phrygian, Locrian
+        const minorModes = ['Minor', 'Aeolian', 'Dorian', 'Phrygian', 'Locrian', 'Dorian b2'];
+        const isMin = minorModes.some(m => mode.includes(m));
+        const ruleKey = isMin ? 'Minor' : 'Major';
 
         for (let i = 0; i < scaleNotes.length; i++) {
             const root = scaleNotes[i].note || scaleNotes[i];
@@ -224,19 +227,41 @@ export class MusicTheory {
             }
 
             if (tensionMask[11]) {
-                if (treat11asSharp) {
-                    const p4 = scaleNotes[(i + 3) % 7].note || scaleNotes[(i + 3) % 7];
-                    const sharp4 = this.sharpen(p4);
-                    chordNotes.push(sharp4);
-                    tensionSuffix += '(#11)';
-                } else if (rules?.[11]) {
-                    chordNotes.push(scaleNotes[(i + 3) % 7].note || scaleNotes[(i + 3) % 7]);
+                const note11 = scaleNotes[(i + 3) % 7].note || scaleNotes[(i + 3) % 7];
+                const isMinorLike = qualitySuffix.includes('m') || qualitySuffix.includes('dim'); // m7, m7b5, dim
+
+                if (isMinorLike) {
+                    // Minor/Dim: Natural 11th is standard and beautiful (e.g. Cm11 -> F)
+                    chordNotes.push(note11);
                     tensionSuffix += '(11)';
+                } else {
+                    // Major/Dominant logic
+                    // If Dominant, assume #11 (Lydian Dominant / Overtone) to avoid clash
+                    // If Major, 11 is usually avoid, but if forced, use #11 (Lydian)
+
+                    // Check if it's Lydian (IV) - note11 is already #11
+                    // Simple heuristic: if function is D, sharpen. 
+                    // If I (Major), and mask is on, maybe sharpen too?
+                    // For now, keep existing behavior for Major but fix Minor.
+                    if (treat11asSharp) {
+                        chordNotes.push(this.sharpen(note11));
+                        tensionSuffix += '(#11)';
+                    } else if (rules?.[11]) {
+                        chordNotes.push(note11);
+                        tensionSuffix += '(11)';
+                    }
                 }
             }
 
             if (tensionMask[13]) {
-                if (rules?.[13]) {
+                if (rules?.forceMajor13) {
+                    // Force Major 13th (Natural 13 on Minor Chord)
+                    // Take the diatonic 6th (b13 in Aeolian) and sharpen it to get Natural 13
+                    const b13 = scaleNotes[(i + 5) % 7].note || scaleNotes[(i + 5) % 7];
+                    const nat13 = this.sharpen(b13);
+                    chordNotes.push(nat13);
+                    tensionSuffix += '(13)';
+                } else if (rules?.[13]) {
                     chordNotes.push(scaleNotes[(i + 5) % 7].note || scaleNotes[(i + 5) % 7]);
                     tensionSuffix += '(13)';
                 }
@@ -245,14 +270,9 @@ export class MusicTheory {
             const fullName = root + qualitySuffix + tensionSuffix;
 
             let romanDisp = isMin ? degreesMinor[i] : degrees[i];
-            if (qualitySuffix.includes('dim') || qualitySuffix.includes('m7b5')) {
+            // Add dim symbol for Major key half-diminished chords (VII)
+            if (!isMin && (qualitySuffix.includes('dim') || qualitySuffix.includes('m7b5'))) {
                 romanDisp += '°';
-            } else if (isMin && i === 2) {
-                romanDisp = 'b' + romanDisp;
-            } else if (isMin && i === 5) {
-                romanDisp = 'b' + romanDisp;
-            } else if (isMin && i === 6) {
-                romanDisp = 'b' + romanDisp;
             }
 
             let suggestions = { standard: [], altered: [] };
